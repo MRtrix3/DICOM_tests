@@ -1,0 +1,50 @@
+#!/bin/bash
+
+if [ $# == 0 ]; then
+  mrtrix_location=~/mrtrix3
+else
+  mrtrix_location="$1"
+fi
+
+TMPFILE=/tmp/__mrtrix_testing_tmp_$$.mif
+
+echo testing using MRtrix3 found in \"$mrtrix_location\"
+
+(
+  cd "$mrtrix_location"/testing
+  ../build ../bin/mrconvert ../bin/mrinfo bin/testing_diff_image bin/testing_diff_header
+)
+export PATH="$mrtrix_location"/bin:"$mrtrix_location"/testing/bin:$PATH
+
+if [[ "$2"x != "x" ]]; then 
+    target_folders=("$2")
+else
+    target_folders=(*/)
+fi
+
+for folder in "${target_folders[@]}"; do (
+  echo in \"$folder\"...
+  cd "$folder"
+  for image in *; do
+    sequence=$(echo "${image%.*}" | mrinfo  ../../"$folder" -property comments 2>/dev/null | grep '\[MR\]')
+    echo -n "  [ ${image%.*} ] ${sequence#*\[MR\] }: "
+    rm -f $TMPFILE 2>/dev/null
+    { 
+      echo "${image%.*}" | mrconvert ../../"$folder" $TMPFILE 2>/dev/null && 
+      testing_diff_image $TMPFILE "$image" -frac 1e-6 -quiet && 
+      testing_diff_header $TMPFILE "$image" -keyval -quiet &&
+      echo OK
+    } || {
+      echo ""
+      echo "############################################################"
+      echo "  ERROR: image $image (${sequence#*\[MR\]}) in folder $folder"
+      echo "############################################################"
+      echo ""
+    }
+    #mv $TMPFILE "$image"
+  done
+
+
+) done
+
+rm -f $TMPFILE 2>/dev/null
